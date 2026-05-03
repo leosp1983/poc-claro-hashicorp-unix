@@ -3,19 +3,18 @@
 # Role: unix_server — vars/main.yaml
 # ============================================================
 
-# --- Usuario a ser criado ---
+# --- Usuário a ser criado ---
 unix_user_name: "usr_poc_unix"
 unix_user_shell: "/bin/bash"
 unix_user_home: "/home/usr_poc_unix"
 
-# --- Pasta e arquivo de relatorio ---
+# --- Pasta e arquivo de relatório ---
 unix_report_path: "/opt/reports/poc_hashicorp"
 unix_report_file: "poc_unix_report.txt"
 
-# --- Servico para validar ---
+# --- Serviço para validar ---
 unix_service_name: "vault"
 
 # --- Vault ---
-vault_addr: "http://10.10.10.7:8200"
 vault_role_id: "a229d003-d76c-e60c-56a1-f9741fbb3429"
-vault_secret_id: "{{ vault_secret_id }}" # via AAP Survey
+vault_secret_id: "520b7a24-c35e-f518-b92f-947d8472b0a3"
