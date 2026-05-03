@@ -14,3 +14,8 @@ unix_report_file: "poc_unix_report.txt"
 
 # --- Servico para validar ---
 unix_service_name: "vault"
+
+# --- Vault ---
+vault_addr: "http://10.10.10.7:8200"
+vault_role_id: "a229d003-d76c-e60c-56a1-f9741fbb3429"
+vault_secret_id: "{{ vault_secret_id }}" # via AAP Survey
