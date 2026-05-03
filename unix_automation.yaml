@@ -1,16 +1,73 @@
 ---
 # ============================================================
 # Playbook: unix_automation.yaml
-# Automação Unix — POC Claro HashiCorp
-#
-# As credenciais (ansible_user / ansible_password / ansible_become_password)
-# são injetadas automaticamente pelo AAP via credencial do tipo Machine,
-# integrada ao HashiCorp Vault.
+# Automação Unix com SSH Signed Keys do Vault
 # ============================================================
+
+# Play 1: Preparar Chave SSH via Vault (Executa no localhost do AAP)
+- name: Preparar Conexao SSH via Vault
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - roles/unix_server/vars/main.yaml
+
+  tasks:
+    - name: Autenticar no Vault via AppRole
+      ansible.builtin.uri:
+        url: "http://10.10.10.7:8200/v1/auth/approle/login"
+        method: POST
+        body_format: json
+        body:
+          role_id: "{{ vault_role_id }}"
+          secret_id: "{{ vault_secret_id }}"
+        return_content: true
+      register: vault_auth
+      no_log: true
+
+    - name: Gerar par de chaves SSH temporario
+      ansible.builtin.command:
+        cmd: "ssh-keygen -t rsa -b 2048 -f /tmp/ansible_tmp_key -N ''"
+      args:
+        creates: /tmp/ansible_tmp_key
+
+    - name: Ler chave publica gerada
+      ansible.builtin.slurp:
+        src: /tmp/ansible_tmp_key.pub
+      register: public_key_content
+
+    - name: Assinar chave publica no Vault
+      ansible.builtin.uri:
+        url: "http://10.10.10.7:8200/v1/ssh/sign/ansible-role"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_auth.json.auth.client_token }}"
+        body_format: json
+        body:
+          public_key: "{{ public_key_content.content | b64decode }}"
+          valid_principals: "root"
+        return_content: true
+      register: vault_ssh_sign
+      no_log: true
+
+    - name: Salvar certificado assinado
+      ansible.builtin.copy:
+        content: "{{ vault_ssh_sign.json.data.signed_key }}"
+        dest: /tmp/ansible_tmp_key-cert.pub
+        mode: "0600"
+
+    - name: Definir fatos de conexao para o grupo unix
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        ansible_ssh_private_key_file: "/tmp/ansible_tmp_key"
+        ansible_ssh_extra_args: "-i /tmp/ansible_tmp_key-cert.pub -o StrictHostKeyChecking=no"
+        ansible_user: "root"
+      loop: "{{ groups['unix'] }}"
+
+# Play 2: Executar Automacao nos servidores Unix
 - name: Automação Unix — POC Claro HashiCorp
-  hosts: "{{ target_host | default('10.10.10.7') }}"
+  hosts: unix
   gather_facts: true
-  become: true
+  # ansible_user e chaves ja definidos via add_host no Play 1
 
   tasks:
     - name: Executar automação Unix via role

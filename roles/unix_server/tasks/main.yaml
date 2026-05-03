@@ -1,61 +1,4 @@
 ---
-# 0. Autenticar no Vault e assinar chave SSH
-- name: Autenticar no Vault via AppRole
-  ansible.builtin.uri:
-    url: "http://10.10.10.7:8200/v1/auth/approle/login"
-    method: POST
-    body_format: json
-    body:
-      role_id: "{{ vault_role_id }}"
-      secret_id: "{{ vault_secret_id }}"
-    return_content: true
-  register: vault_auth
-  delegate_to: localhost
-  no_log: true
-
-- name: Extrair token do Vault
-  ansible.builtin.set_fact:
-    vault_token: "{{ vault_auth.json.auth.client_token }}"
-  no_log: true
-
-- name: Gerar par de chaves SSH temporario
-  ansible.builtin.command:
-    cmd: "ssh-keygen -t rsa -b 2048 -f /tmp/ansible_tmp_key -N ''"
-    creates: /tmp/ansible_tmp_key
-  delegate_to: localhost
-
-- name: Ler chave publica gerada
-  ansible.builtin.slurp:
-    src: /tmp/ansible_tmp_key.pub
-  register: public_key_content
-  delegate_to: localhost
-
-- name: Assinar chave publica no Vault
-  ansible.builtin.uri:
-    url: "http://10.10.10.7:8200/v1/ssh/sign/ansible-role"
-    method: POST
-    headers:
-      X-Vault-Token: "{{ vault_token }}"
-    body_format: json
-    body:
-      public_key: "{{ public_key_content.content | b64decode }}"
-      valid_principals: "root"
-    return_content: true
-  register: vault_ssh_sign
-  delegate_to: localhost
-  no_log: true
-
-- name: Salvar certificado assinado
-  ansible.builtin.copy:
-    content: "{{ vault_ssh_sign.json.data.signed_key }}"
-    dest: /tmp/ansible_tmp_key-cert.pub
-    mode: "0600"
-  delegate_to: localhost
-
-- name: Configurar conexao SSH com certificado Vault
-  ansible.builtin.set_fact:
-    ansible_ssh_private_key_file: /tmp/ansible_tmp_key
-    ansible_ssh_extra_args: "-i /tmp/ansible_tmp_key-cert.pub -o StrictHostKeyChecking=no"
 # ============================================================
 # Role: unix_server — tasks/main.yaml
 # ============================================================
@@ -72,9 +15,8 @@
 - name: Registrar resultado da criacao do usuario
   ansible.builtin.set_fact:
     log_user: >-
-      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] USUARIO '{{ unix_user_name
-      }}' {{ 'CRIADO com sucesso' if result_user.changed else 'ja existia (sem
-      alteracao)' }}
+      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] USUARIO '{{ unix_user_name }}'
+      {{ 'CRIADO com sucesso' if result_user.changed else 'ja existia (sem alteracao)' }}
 
 # 2. Criar pasta no servidor
 - name: Criar pasta de relatorio
@@ -87,9 +29,8 @@
 - name: Registrar resultado da criacao da pasta
   ansible.builtin.set_fact:
     log_folder: >-
-      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] PASTA '{{ unix_report_path
-      }}' {{ 'CRIADA com sucesso' if result_folder.changed else 'ja existia (sem
-      alteracao)' }}
+      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] PASTA '{{ unix_report_path }}'
+      {{ 'CRIADA com sucesso' if result_folder.changed else 'ja existia (sem alteracao)' }}
 
 # 3. Validar servico do Vault
 - name: Coletar fatos dos servicos
@@ -97,16 +38,13 @@
 
 - name: Validar estado do servico Vault
   ansible.builtin.set_fact:
-    vault_status: "{{ ansible_facts.services[unix_service_name + '.service'].state |
-      default('not found') }}"
-    vault_status_full: "{{ ansible_facts.services[unix_service_name + '.service'] |
-      default('Servico nao instalado') }}"
+    vault_status: "{{ ansible_facts.services[unix_service_name + '.service'].state | default('not found') }}"
 
 - name: Registrar resultado da validacao do servico
   ansible.builtin.set_fact:
     log_service: >-
-      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] SERVICO '{{
-      unix_service_name }}' estado atual: {{ vault_status }}
+      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] SERVICO '{{ unix_service_name }}'
+      estado atual: {{ vault_status }}
 
 # 4. Gerar e salvar arquivo de relatorio
 - name: Gerar arquivo de relatorio
