@@ -1,0 +1,88 @@
+---
+# ============================================================
+# Role: unix_server — tasks/main.yaml
+# ============================================================
+
+# 1. Criar usuario no servidor
+- name: Criar usuario no servidor Unix
+  ansible.builtin.user:
+    name: "{{ unix_user_name }}"
+    shell: "{{ unix_user_shell }}"
+    home: "{{ unix_user_home }}"
+    state: present
+  register: result_user
+
+- name: Registrar resultado da criacao do usuario
+  ansible.builtin.set_fact:
+    log_user: >-
+      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] USUARIO '{{ unix_user_name }}'
+      {{ 'CRIADO com sucesso' if result_user.changed else 'ja existia (sem alteracao)' }}
+
+# 2. Criar pasta no servidor
+- name: Criar pasta de relatorio
+  ansible.builtin.file:
+    path: "{{ unix_report_path }}"
+    state: directory
+    mode: '0755'
+  register: result_folder
+
+- name: Registrar resultado da criacao da pasta
+  ansible.builtin.set_fact:
+    log_folder: >-
+      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] PASTA '{{ unix_report_path }}'
+      {{ 'CRIADA com sucesso' if result_folder.changed else 'ja existia (sem alteracao)' }}
+
+# 3. Validar servico do Vault
+- name: Coletar fatos dos servicos
+  ansible.builtin.service_facts:
+
+- name: Validar estado do servico Vault
+  ansible.builtin.set_fact:
+    vault_status: "{{ ansible_facts.services[unix_service_name + '.service'].state | default('not found') }}"
+    vault_status_full: "{{ ansible_facts.services[unix_service_name + '.service'] | default('Servico nao instalado') }}"
+
+- name: Registrar resultado da validacao do servico
+  ansible.builtin.set_fact:
+    log_service: >-
+      [{{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}] SERVICO '{{ unix_service_name }}'
+      estado atual: {{ vault_status }}
+
+# 4. Gerar e salvar arquivo de relatorio
+- name: Gerar arquivo de relatorio
+  ansible.builtin.copy:
+    content: |
+      ============================================================
+       RELATORIO DE EXECUCAO - POC CLARO HASHICORP UNIX
+       Gerado em: {{ now(utc=false, fmt='%Y-%m-%dT%H:%M:%S') }}
+       Servidor  : {{ inventory_hostname }}
+      ============================================================
+
+      ACOES REALIZADAS:
+      ----------------------------------------------------------
+      {{ log_user }}
+
+      {{ log_folder }}
+
+      {{ log_service }}
+
+      RESUMO:
+      ----------------------------------------------------------
+        Usuario: {{ unix_user_name }}
+        Pasta  : {{ unix_report_path }}
+        Servico: {{ unix_service_name }} ({{ vault_status }})
+
+      ============================================================
+       FIM DO RELATORIO
+      ============================================================
+    dest: "{{ unix_report_path }}/{{ unix_report_file }}"
+    mode: '0644'
+
+# 5. Ler e exibir o relatorio (Debug organizado)
+- name: Ler o arquivo de relatorio
+  ansible.builtin.command: "cat {{ unix_report_path }}/{{ unix_report_file }}"
+  register: report_content
+  changed_when: false
+
+- name: Exibir o conteudo do relatorio
+  ansible.builtin.debug:
+    msg: "{{ report_content.stdout_lines }}"
